@@ -1,4 +1,4 @@
-# Streaming Insights: Netflix and its Content
+# Streaming Insights: Netflix and its Contents
 ### [View Report](https://soumen02.github.io/Data-Analysis-Netflix/)
 This project provides an in-depth analysis of streaming platforms, with a special emphasis on Netflix. It explores the factors contributing to a platform's success and investigates the complex relationships within the movie industry.
 
