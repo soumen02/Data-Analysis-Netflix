@@ -3,7 +3,10 @@
 This project provides an in-depth analysis of streaming platforms, with a special emphasis on Netflix. It explores the factors contributing to a platform's success and investigates the complex relationships within the movie industry.
 
 ## Data Sources
-The project utilizes publicly available datasets on popular streaming platforms. The primary focus is on Netflix due to the richness of data available.
+- https://www.kaggle.com/datasets/shivamb/netflix-shows
+- https://www.kaggle.com/datasets/shivamb/amazon-prime-movies-and-tv-shows
+- https://www.kaggle.com/datasets/shivamb/disney-movies-and-tv-shows
+- https://www.kaggle.com/datasets/ashishgup/netflix-rotten-tomatoes-metacritic-imdb
 
 ## Data Analysis
 The analysis follows this structure:
