@@ -1,0 +1,902 @@
+---
+title: "Streaming Insights: Netflix and its Contents"
+subtitle: "Data Analysis Project"
+author: "Soumen Mohanty"
+date: "April 20, 2023"
+output:
+  html_document:    
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    theme: readable
+    highlight: tango
+    df_print: paged
+    code_folding: show
+  pdf_document:
+    toc: yes
+---
+
+```{r, echo=FALSE, message=FALSE}
+#Loading Libraries and Data
+library(dbplyr)
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(dagitty)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(igraph)
+library(tidygraph)
+
+
+netflix_titles <- read_csv("netflix_titles.csv")
+disney_plus_titles <- read_csv("disney_plus_titles.csv")
+amazon_prime_titles <- read_csv("amazon_prime_titles.csv")
+netflix_ratings <- read_csv("netflix-rotten-tomatoes-metacritic-imdb.csv")
+
+
+# Cleaning the Data
+# Removing unnecessary columns from each dataset
+netflix_titles <- netflix_titles %>% select(-description, -show_id)
+disney_plus_titles <- disney_plus_titles %>% select(-description, -show_id)
+amazon_prime_titles <- amazon_prime_titles %>% select(-description, -show_id)
+netflix_ratings <- netflix_ratings %>% select(-"Hidden Gem Score", -"Netflix Link", -"IMDb Link", -"Summary", -"Image", -"Poster", -"TMDb Trailer", -"Trailer Site")
+
+
+# Convert 'date_added' to Date for netflix_titles, disney_plus_titles, and amazon_prime_titles
+netflix_titles$date_added <- as.Date(netflix_titles$date_added, format = "%B %d, %Y")
+disney_plus_titles$date_added <- as.Date(disney_plus_titles$date_added, format = "%B %d, %Y")
+amazon_prime_titles$date_added <- as.Date(amazon_prime_titles$date_added, format = "%B %d, %Y")
+
+# Adding a new column 'Source' to each dataframe, indicating the platform the data came from.
+netflix_titles$Source <- "Netflix"
+amazon_prime_titles$Source <- "Amazon Prime"
+disney_plus_titles$Source <- "Disney Plus"
+
+# Identifying common columns among the streaming services dataframes
+common_cols <- Reduce(intersect, list(names(netflix_titles), names(amazon_prime_titles), names(disney_plus_titles)))
+
+# Combining the streaming services data-sets
+combined_streaming_data <- dplyr::bind_rows(
+  netflix_titles[common_cols],
+  amazon_prime_titles[common_cols],
+  disney_plus_titles[common_cols]
+)
+
+
+```
+
+# Introduction
+
+This report conducts an extensive analysis of the streaming platforms landscape, with a special focus on Netflix. Initially, the report provides a comparison among key competitors and underlines the necessity of understanding the content landscape. It then explores the content volume and its distribution, emphasizing TV shows, movies, age ratings, and genres, across different platforms.
+
+The study narrows its focus on Netflix in later sections, analyzing its content based on country of production and observing trends in content addition. This shift in focus is guided by Netflix's significant market position and the availability of comprehensive datasets for analysis.
+
+The latter part of the report dives into regression analyses to decipher the variables contributing to a movie's success, including ratings, languages, and awards. Moreover, the significance of directors, writers, and production houses in influencing box office performance is discussed. The report concludes with network visualizations capturing the collaboration dynamics among these entities in the industry.
+
+# The Data 
+
+The analysis is conducted on multiple datasets related to streaming platforms and their content.
+
+1. netflix_titles: This dataset contains information about titles available on Netflix. It includes variables such as title name, type (TV show or movie), director, cast, country, release year, duration, rating, and genre.
+2. disney_plus_titles: This dataset contains information about titles available on Disney Plus. It has similar variables as the netflix_titles dataset, including title name, type, director, cast, country, release year, duration, rating, and genre.
+3. amazon_prime_titles: This dataset contains information about titles available on Amazon Prime. It shares the same variables as the previous datasets, including title name, type, director, cast, country, release year, duration, rating, and genre.
+4. netflix_ratings: This dataset provides ratings and other attributes for titles available on Netflix. It includes variables such as title name, IMDb score, Rotten Tomatoes score, Metacritic score, awards received, awards nominated for, box office revenue, languages, release date, and production house.
+
+# An Overview
+## Content
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Count the number of titles per platform
+title_counts <- combined_streaming_data %>%
+  group_by(Source) %>%
+  summarise(Number_of_Titles = n()) %>% 
+  arrange(desc(Number_of_Titles))
+
+# print the summary table with different column names 
+colnames(title_counts) <- c("Streaming Platform", "Number of Titles")
+title_counts
+
+```
+
+From the summary table, we can see the total number of titles each streaming service has in its content library. Amazon Prime holds the largest collection with 9668 titles. Netflix follows closely with 8807 titles. Disney Plus, on the other hand, has a significantly smaller library with only 1450 titles.
+
+The disparity in the number of titles can be attributed to various factors, including the age of the streaming service, their target audience, and their business strategies. For instance, Netflix and Amazon Prime have been in the streaming industry longer than Disney Plus, giving them more time to accumulate a larger library of content. Additionally, Disney Plus's strategy has been to focus more on quality and exclusive content, which can explain its smaller library size.
+
+Understanding the size of each platform's library is beneficial for various stakeholders. For potential subscribers, it provides an idea about the volume of content they will have access to. For the streaming platforms, it sheds light on their position relative to their competitors, guiding their content acquisition strategies.
+
+In the subsequent sections, we will delve deeper into the nature of these titles, examining their distribution by content type, genre, ratings, and more. 
+
+## TV Shows and Movies
+```{r, echo=FALSE, message=FALSE}
+# Count data and create bar chart
+count_data <- combined_streaming_data %>%
+  group_by(Source, type) %>%
+  summarise(Count = n())
+
+ggplot(count_data, aes(x = Source, y = Count, fill = type)) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = Count), vjust = -0.3, position = position_dodge(0.9)) + # Add data labels
+  theme_minimal() +
+  labs(title = "Distribution of TV Shows and Movies",
+       x = "Streaming Platform",
+       y = "Number of Titles",
+       fill = "Type of Content")
+```
+
+
+- Amazon Prime: A majority of the content on Amazon Prime is movies, accounting for 7814 titles. The platform also offers 1854 TV shows.
+- Disney Plus: Disney Plus has a relatively balanced distribution with 1052 movies and 398 TV shows.
+- Netflix: Similar to Amazon Prime, Netflix's library leans more towards movies, with 6131 titles. 
+
+However, it has a significant number of TV shows as well, accounting for 2676 titles.
+The visualization reveals interesting insights about the content strategy of each platform. Amazon Prime and Netflix's large number of movies suggest a wide selection of both original and licensed films. This is likely due to these platforms' longer existence in the streaming market, allowing them to acquire and produce a vast number of movies over time.
+
+Disney Plus, however, showcases a more balanced distribution of movies and TV shows, despite having a smaller total library. This could be attributed to Disney Plus's unique position as a platform that hosts many series from its associated networks and studios, such as Disney Channel, Marvel, and Star Wars.
+
+For potential subscribers, this analysis might influence their choice of platform based on their preference for movies or TV shows. From the platform's perspective, understanding their content distribution could guide their future content acquisition and production strategies to better meet viewer demands.
+
+In the following sections, we will further dissect the nature of the content on these platforms, looking at elements like genre distribution and ratings. 
+
+
+```{r, echo=FALSE, message=FALSE}
+
+# Filter data for each platform and exclude NA
+netflix_data <- combined_streaming_data %>% filter(Source == "Netflix") %>% drop_na(rating)
+disney_data <- combined_streaming_data %>% filter(Source == "Disney Plus") %>% drop_na(rating)
+amazon_data <- combined_streaming_data %>% filter(Source == "Amazon Prime") %>% drop_na(rating)
+
+```
+
+
+## Age Ratings
+
+The distribution of ratings for Netflix shows 'TV-MA' as the most common rating with over 3000 titles. 'TV-MA' is a rating assigned by the TV Parental Guidelines to a program that is intended for mature audiences. Only those 17 and older may watch it. This is followed by 'TV-14', which is about three quarters of 'TV-MA', indicating that the program may be unsuitable for children under 14. 'TV-PG' comes next, about half of 'TV-MA', suggesting parental guidance as the program may contain material that parents may find unsuitable for younger children.
+```{r, echo=FALSE, message=FALSE}
+
+# Plot for Netflix
+netflix_data %>% 
+  count(rating) %>% 
+  arrange(desc(n)) %>%
+  ggplot(aes(x = reorder(rating, n), y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Netflix Ratings",
+       x = "Rating",
+       y = "Number of Titles") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+The most common rating on Disney+ is 'TV-G', indicating that the content is suitable for all ages. This is followed by 'TV-PG', 'G', and 'PG', signifying that some material may not be suitable for children, and parental guidance is suggested. The distribution here does not decrease as rapidly as in the case of Netflix, showing a more uniform spread of different ratings.
+```{r, echo=FALSE, message=FALSE}
+# Plot for Disney+
+disney_data %>% 
+  count(rating) %>% 
+  arrange(desc(n)) %>%
+  ggplot(aes(x = reorder(rating, n), y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Disney+ Ratings",
+       x = "Rating",
+       y = "Number of Titles") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The most common rating for Amazon Prime is '13+', followed by '16+', 'All', '18+', 'R', 'PG-13', '7+', and so on. The count of titles decreases somewhat exponentially with each subsequent rating. The ratings here suggest that Amazon Prime, like Netflix, also caters to a more mature audience. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Plot for Amazon Prime
+amazon_data %>% 
+  count(rating) %>% 
+  arrange(desc(n)) %>%
+  ggplot(aes(x = reorder(rating, n), y = n)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  coord_flip() +
+  labs(title = "Amazon Prime Ratings",
+       x = "Rating",
+       y = "Number of Titles") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Each platform's rating distribution gives us insights into the type of audience they are catering to. Netflix and Amazon Prime have a larger count of titles with mature ratings such as 'TV-MA' and '18+', suggesting that their content is skewed towards older teens and adults. Their libraries seem to encompass a wide range of genres and themes, some of which may contain mature content unsuitable for younger audiences.
+
+On the other hand, Disney+ exhibits a significantly different pattern. With 'TV-G' being the most common rating, it's evident that Disney+ is catering predominantly to younger viewers and families. The uniform distribution of different ratings on Disney+ also implies that it offers a diverse selection suitable for various age groups, although the content is generally more family-friendly.
+
+Understanding the rating distribution is crucial for both the streaming services and their users. Potential subscribers, especially parents and guardians, might consider these aspects to choose a platform that best suits their needs or preferences. The platforms, meanwhile, could use this analysis to identify any gaps in their content offerings and adjust their content acquisition or production strategies accordingly.
+
+The next step in our report will delve into the genre distribution across these platforms. Please share the code for this part of the analysis when ready.
+
+## Genres
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+genre_distribution <- combined_streaming_data %>%
+  separate_rows(listed_in, sep = ", ") %>%
+  count(Source, listed_in)
+# Function to standardize genre names
+standardize_genre <- function(genre) {
+  ifelse(
+    genre %in% c('Documentaries', 'Comedies', 'Action & Adventure'), 
+    sub('ies$', 'y', sub('& Adventure', '', genre)),
+    genre
+  )
+}
+
+# Apply the function to genre_distribution
+genre_distribution$listed_in <- standardize_genre(genre_distribution$listed_in)
+
+# Calculate total count for each genre across all platforms
+genre_distribution_total <- genre_distribution %>%
+  group_by(listed_in) %>%
+  summarise(Total = sum(n)) %>%
+  arrange(-Total)
+
+# Filter to include only the top 18 most common genres
+top_genres <- head(genre_distribution_total$listed_in, 15)
+
+# Filter the original genre_distribution dataframe to include only the top genres
+genre_distribution_filtered <- genre_distribution %>%
+  filter(listed_in %in% top_genres)
+
+# Calculate the total counts per source
+source_totals <- genre_distribution_filtered %>%
+  group_by(Source) %>%
+  summarise(Total = sum(n))
+
+# Join the totals back to the original data and calculate proportions
+genre_distribution_filtered <- genre_distribution_filtered %>%
+  inner_join(source_totals, by = "Source") %>%
+  mutate(n = n / Total) %>%
+  select(-Total)
+
+# Plot
+ggplot(genre_distribution_filtered, aes(fill=Source, y=n, x=reorder(listed_in, -n))) + 
+  geom_bar(position="fill", stat="identity") +
+  coord_flip() +
+  labs(y="Proportion", x="Genre", title="Genre Distribution Across Platforms", fill="Source") +
+  scale_fill_brewer(palette="Set3")
+
+```
+
+
+For Amazon Prime, a significant portion of its offerings are dominated by Drama, Comedy, and Action genres. These genres are known for their broad appeal to adult audiences, showcasing Amazon Prime's focus on a wide-ranging, mature audience base.
+
+Moving on to Disney Plus, the genres that stand out are Family, Animation, and Comedy. This matches Disney's iconic image as a provider of family-friendly and animated content. It suggests that Disney Plus is a go-to platform for families with children, as well as adults who enjoy light-hearted, animated, and comedic content.
+
+For Netflix, the dominance of genres like International Movies, Dramas, and Comedy, underlines its wide-ranging content strategy. The prominence of International Movies and TV Shows underscores Netflix's commitment to providing content that caters to diverse tastes and cultures, highlighting their appeal to a global audience.
+
+Despite the difference in emphasis, it's worth noting that Comedy is a common popular genre across all three platforms. This underlines the universal appeal of this genre.
+
+Overall, each platform seems to have a distinct genre profile that aligns with their branding and target audience. It's worth noting that while there are certain genres that each platform focuses on, there is also a broad variety of genres available across all platforms. This diversity in offerings allows each platform to cater to different audience preferences and ensures that viewers have a wide variety of content to choose from.
+
+# Focusing on Netflix
+# Country of Production
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+country_distribution <- netflix_titles %>%
+  count(country) %>%
+  na.omit() %>%
+  arrange(-n) %>% 
+  rename(Country = country, 'Number of Titles' = n)
+
+country_distribution
+```
+
+
+This table represents the distribution of Netflix titles across different countries. It essentially tells us where the content available on Netflix originates from. Here is an interpretation of the data:
+
+- United States (2818 titles): Unsurprisingly, the United States dominates the content library on Netflix, with 2818 titles. This is to be expected given that Netflix is a US-based company and a large portion of its audience resides in the US.
+- India (972 titles): The next country with the most content is India, with 972 titles. This indicates a substantial amount of Indian cinema and TV shows on the platform, reflecting Netflix's focus on targeting the vast Indian market and the popularity of Bollywood movies globally.
+- United Kingdom (419 titles): The United Kingdom, home to a rich history of film and television production, ranks third, with 419 titles. This highlights the popularity and global reach of British content, which often appeals to viewers with their distinctive storytelling and settings.
+- Japan (245 titles) and South Korea (199 titles): Japan and South Korea are the next countries on the list, reflecting the growing global popularity of Japanese anime and Korean dramas, and the success of Netflix's investment in these regions.
+- Canada (181 titles), Spain (145 titles), France (124 titles), Mexico (110 titles), and Egypt (106 titles): The presence of these countries in the top 10 suggests a broad geographical range of content on Netflix, demonstrating its commitment to diversity and international representation.
+
+The overall data reveals Netflix's broad international focus, catering to viewers with a variety of tastes and cultural backgrounds. The platform's ability to provide content from diverse sources contributes to its global success, offering a wide variety of entertainment options that cross cultural and linguistic barriers.
+
+
+## Content Addition
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Grouping and counting
+netflix_by_year_and_type <- netflix_titles %>%
+  group_by(date_added, type) %>%
+  summarise(content_count = n(), .groups = "drop")
+
+# Generating the plot
+ggplot(netflix_by_year_and_type, aes(x = date_added, y = content_count, color = type)) +
+  geom_line() +
+  labs(title = "Yearly content addition on Netflix",
+       x = "Year",
+       y = "Number of Titles",
+       color = "Content Type") +
+  theme_minimal()
+
+```
+
+
+In the plot, we observe a dramatic increase in the number of movies being added to Netflix's content library between 2017 and 2020. This suggests that during these years, Netflix heavily invested in expanding its movie collection, likely to meet growing user demand and to compete with other streaming platforms.
+
+In contrast, the addition of TV shows to the platform during the same period shows moderate growth. Netflix may have been focusing on the quality or diversity of TV shows rather than sheer quantity during this period. Alternatively, this could indicate the higher costs or longer production times associated with TV shows.
+
+In 2021, the graph shows a fluctuation in the number of both movies and TV shows added to Netflix. The reasons behind these fluctuations could be many, ranging from changes in content acquisition strategy, shifts in user viewing preferences, to the impacts of real-world events like the COVID-19 pandemic affecting content production and release schedules.
+
+Taken together, these trends highlight Netflix's dynamic strategy for content addition, reflecting the company's response to changing market demands and competitive pressures. Netflix appears to have ramped up its movie content rapidly in a few years, while taking a more gradual approach towards building its TV show catalog. The fluctuations in 2021 might indicate an evolving strategy or reaction to unpredictable external factors. This kind of analysis can offer valuable insights to stakeholders interested in Netflix's content strategy, competitive positioning, and responsiveness to market changes.
+
+
+```{r, echo=FALSE, message=FALSE}
+
+# Drop unnecessary columns
+netflix_ratings <- netflix_ratings %>%
+  select(-Tags, -`Country Availability`, -Runtime)
+
+# Convert 'Languages' to number of languages
+netflix_ratings$Languages <- sapply(strsplit(netflix_ratings$Languages, ", "), length)
+
+# Convert 'Boxoffice' to numerical values
+netflix_ratings$Boxoffice <- as.numeric(gsub("[^0-9.]", "", netflix_ratings$Boxoffice))
+
+# Convert 'Release Date' to Date format
+netflix_ratings$`Release Date` <- as.Date(netflix_ratings$`Release Date`, format = "%d %b %Y")
+
+```
+
+# Regression Analyses
+
+__Regression Model 1: Analyzing Impact of Movie Ratings on Box Office Performance__
+```{r, echo=FALSE, message=FALSE}
+library(dagitty)
+# Regression model 1: Boxoffice ~ IMDb Score + Rotten Tomatoes Score + Metacritic Score
+g1 <- dagitty("dag{
+              Boxoffice <- IMDb_Score
+              Boxoffice <- Rotten_Tomatoes_Score
+              Boxoffice <- Metacritic_Score
+              }")
+coordinates(g1) = list(x = c(Boxoffice = 0, IMDb_Score = -1, Rotten_Tomatoes_Score = 0, Metacritic_Score = 1), 
+                       y = c(Boxoffice = 0, IMDb_Score = 0, Rotten_Tomatoes_Score = 1, Metacritic_Score = 0))
+plot(g1)
+```
+
+
+```{r, echo=FALSE, message=FALSE, results='asis'}
+
+# Create a new data frame for the first regression
+regression_df1 <- netflix_ratings %>%
+  filter(!is.na(Boxoffice))
+
+# Convert IMDb Score to a 100-point scale
+regression_df1$`IMDb Score` <- regression_df1$`IMDb Score` * 10
+
+# Replace NA values with 0 in Awards Received and Awards Nominated For
+regression_df1$`Awards Received` <- ifelse(is.na(regression_df1$`Awards Received`), 0, regression_df1$`Awards Received`)
+regression_df1$`Awards Nominated For` <- ifelse(is.na(regression_df1$`Awards Nominated For`), 0, regression_df1$`Awards Nominated For`)
+
+# Compute the average of the other two scores where one score is NA and at least one of the other two is not NA
+for (i in 1:nrow(regression_df1)) {
+  if (is.na(regression_df1$`IMDb Score`[i])) {
+    regression_df1$`IMDb Score`[i] <- mean(c(regression_df1$`Rotten Tomatoes Score`[i], regression_df1$`Metacritic Score`[i]), na.rm = TRUE)
+  }
+  if (is.na(regression_df1$`Rotten Tomatoes Score`[i])) {
+    regression_df1$`Rotten Tomatoes Score`[i] <- mean(c(regression_df1$`IMDb Score`[i], regression_df1$`Metacritic Score`[i]), na.rm = TRUE)
+  }
+  if (is.na(regression_df1$`Metacritic Score`[i])) {
+    regression_df1$`Metacritic Score`[i] <- mean(c(regression_df1$`IMDb Score`[i], regression_df1$`Rotten Tomatoes Score`[i]), na.rm = TRUE)
+  }
+}
+
+# Remove rows where all scores are NA
+regression_df1 <- regression_df1[!is.na(regression_df1$`IMDb Score`) & !is.na(regression_df1$`Rotten Tomatoes Score`) & !is.na(regression_df1$`Metacritic Score`), ]
+
+```
+
+The first regression analysis aims to uncover the relationship between box office returns and three key movie rating predictors: IMDb score, Rotten Tomatoes score, and Metacritic score.
+
+The Directed Acyclic Graph above depicts the causal relationships hypothesized in the model. It posits that the box office success of a movie is influenced by its ratings on these major review platforms, each exerting an independent effect.
+
+Upon running the regression (Table in Appendix), it is found that statistically significant relationships for IMDb and Metacritic scores, whereas Rotten Tomatoes score was not found to be a significant predictor.
+
+Notably, IMDb scores showed a positive correlation with box office returns. Specifically, for every one-unit increase in the IMDb score, we predicted an increase of approximately 1.78 million in box office returns, all else being equal. This indicates that higher IMDb scores may contribute to greater financial success at the box office.
+
+Conversely, Metacritic scores exhibited a negative correlation with box office returns. A one-unit increase in the Metacritic score was associated with a decrease of approximately 580,800 in box office returns, holding all else constant. Thus, higher Metacritic scores may inversely affect box office performance, as per our model.
+
+The Rotten Tomatoes score, however, did not demonstrate a statistically significant correlation with box office returns. This suggests that, within the confines of our model, the Rotten Tomatoes score does not provide substantial predictive information about a film's financial success.
+
+While these results shed light on the potential impact of critical scores on box office performance, it's important to underscore the inherent limitations in interpreting these causal relationships. First, while the model assumes these scores independently impact box office returns, in reality, these platforms and their audiences may overlap, thus influencing scores in complex, interrelated ways. Moreover, the statistical significance of IMDb and Metacritic scores does not imply a strong predictive power. A myriad of other factors, not included in the model, such as marketing spend, star power, genre, and release timing, can significantly influence a movie's box office performance.
+
+In conclusion, this analysis offers an intriguing perspective on how critical scores may correlate with financial performance, encouraging further exploration into the multifaceted determinants of box office success.
+
+
+__Regression Model 2: Investigating the Impact of Number of Languages on Box Office Performance__
+```{r, echo=FALSE, message=FALSE}
+# Regression model 2: Boxoffice ~ Languages
+g2 <- dagitty("dag{
+              Boxoffice <- Languages
+              }")
+coordinates(g2) = list(x = c(Boxoffice = 0, Languages = -1), 
+                       y = c(Boxoffice = 0, Languages = 0))
+plot(g2, main="Regression 2")
+```
+
+The second regression model investigates the potential relationship between the number of languages in which a movie is made available and its box office earnings.
+
+The DAG above outlines the causal relationship hypothesized. Here, it is proposed that the number of languages a movie is offered in might influence its financial success at the box office.
+
+According to the regression results (Table in Appendix), there is a statistically significant relationship between the number of languages and box office returns. For every additional language in which a movie was made available, there is an associated increase in box office returns by approximately 6.83 million dollars.
+
+This positive correlation suggests that increasing a film's accessibility by providing it in multiple languages could lead to increased financial performance. Such a result might reflect the importance of international markets in contributing to a film's overall box office success.
+
+However, as with the previous model, it's critical to note the limitations of this analysis. While the number of languages shows a statistically significant correlation with box office earnings, many other factors that were not included in our model can influence a movie's financial performance. Furthermore, it's also worth considering that distributing a movie in multiple languages could come with increased costs, which are not accounted for in this analysis.
+
+In conclusion, while this model provides an interesting perspective on the potential financial benefits of making a film available in multiple languages.
+
+
+
+__Regression Model 3: Exploring the Relationship Between Box Office Performance and Awards__
+```{r, echo=FALSE, message=FALSE}
+# Regression model 3: Boxoffice ~ Awards Received + Awards Nominated For
+g3 <- dagitty("dag{
+              Boxoffice <- Awards_Received
+              Boxoffice <- Awards_Nominated_For
+              }")
+coordinates(g3) = list(x = c(Boxoffice = 0, Awards_Received = -1, Awards_Nominated_For = 1), 
+                       y = c(Boxoffice = 0, Awards_Received = 0, Awards_Nominated_For = 0))
+plot(g3, main="Regression 3")
+```
+
+
+The third regression model explores the possible relationship between the box office performance of a movie and the awards it received and was nominated for.
+
+The DAG above depicts the proposed causal relationships for this model. It is hypothesized that both the awards a film received and the number of nominations it garnered could have an influence on its box office earnings.
+
+According to the regression results, both variables are found to have statistically significant correlations with box office returns. However, they had different directions of effect. The coefficient for 'Awards Received' was negative, indicating that an increase in the number of awards a movie received was associated with a decrease in box office returns of about $249,118 per award. On the other hand, 'Awards Nominated For' had a positive coefficient, implying that for each additional nomination, the box office returns increased by approximately $778,090, holding other factors constant.
+
+This seemingly contradictory result could be due to several factors. For instance, it's possible that critically acclaimed movies (those that receive many awards) may not always perform well at the box office due to factors like genre, audience appeal, or marketing. Alternatively, films that receive numerous nominations might generate more public interest, leading to higher box office earnings. While the opposite could also be argued that an increasing public interest leads to more nominations, requiring further analysis. 
+
+So again, it's important to consider the limitations of this model. While it includes more variables than our previous models, there are still numerous other factors that can influence box office performance and are not accounted for here.
+
+In conclusion, the model suggests a complex relationship between awards and box office performance, highlighting the potential differences in impact between award wins and nominations. However, further research is needed to fully understand these dynamics and to develop a more comprehensive model of box office success.
+
+
+This Directed Acyclic Graph below encompasses all the variables included in our previous regression models: IMDb Score, Rotten Tomatoes Score, Metacritic Score, Languages, Awards Received, and Awards Nominated For, in relation to Boxoffice.
+
+```{r, echo=FALSE, message=FALSE}
+g <- dagitty('dag{
+                IMDb_Score -> Boxoffice
+                Rotten_Tomatoes_Score -> Boxoffice
+                Metacritic_Score -> Boxoffice
+                Languages -> Boxoffice
+                Awards_Received -> Boxoffice
+                Awards_Nominated_For -> Boxoffice
+                Languages -> IMDb_Score
+                Languages -> Rotten_Tomatoes_Score
+                Languages -> Metacritic_Score
+                IMDb_Score -> Awards_Nominated_For
+                Rotten_Tomatoes_Score -> Awards_Nominated_For
+                Metacritic_Score -> Awards_Nominated_For
+                Awards_Nominated_For -> Awards_Received
+            }')
+
+coordinates(g) = list(
+  x = c(
+    Boxoffice = 0, 
+    IMDb_Score = -2, 
+    Rotten_Tomatoes_Score = -1, 
+    Metacritic_Score = 2, 
+    Languages = -1,
+    Awards_Received = 1,
+    Awards_Nominated_For = 2
+  ),
+  y = c(
+    Boxoffice = 0, 
+    IMDb_Score = 0, 
+    Rotten_Tomatoes_Score = -1, 
+    Metacritic_Score = 0, 
+    Languages = 1,
+    Awards_Received = -1,
+    Awards_Nominated_For = 1
+  )
+)
+
+plot(g)
+```
+
+
+This concludes our investigation of the factors influencing box office revenues. This model provides an interpretation of the multilayered relationships and assumptions that underpin the financial success of a film, bringing together all variables considered in the above regression analyses.
+
+At its core, the DAG identifies IMDb Score, Rotten Tomatoes Score, Metacritic Score, Languages, Awards Received, and Awards Nominated For as critical determinants of box office earnings. The model postulates that each of these factors, encompassing critical acclaim, global reach, and industry recognition, directly contribute to a film's economic success.
+
+It suggests that the number of languages a film is available in can influence its critical scores, reflecting the potential impact of global accessibility on a film's appeal and reputation. Likewise, the model proposes a link between a film's critical scores and its likelihood of receiving award nominations, highlighting the role of professional critique in garnering industry recognition. It also envisages a connection between the volume of award nominations and the final tally of awards received.
+
+However, there are also points to potential confounding factors. Languages and Awards Nominated For could distort the perceived relationships between other predictors and box office revenues due to their multifaceted links within the DAG.
+
+While the DAG provides a comprehensive overview and a natural conclusion to the series of regression analyses, it's crucial to remember that it doesn't confirm causality. Each path represented is an assumption and demands further rigorous validation through dedicated investigations and analyses. 
+
+
+# Further Analysis 
+## Directors
+
+The section "Directors, Writers, and Production Houses" dives into the impact of individual directors, writers, and production houses on box office performance.
+
+Below, the roles of directors, writers, and production houses are broken down to quantify their contributions to the total box office revenue.
+
+Directors have a crucial role in shaping the film, and often their name can draw a crowd. Our data reveals that George Lucas is at the top, contributing to over $5.8 billion in box office revenue. Following him are renowned directors Steven Spielberg, Andy Muschietti, and David Yates. This suggests that a director's reputation and brand can significantly affect a film's financial success.
+
+```{r, echo=FALSE, message=FALSE}
+
+# Separate the directors into individual rows
+director_separated_df <- regression_df1 %>%
+  separate_rows(Director, sep = ",\\s*") %>%
+  mutate(Director = trimws(Director))  # remove any potential leading or trailing whitespaces
+
+# Top directors by total box office revenue
+top_boxoffice_directors <- director_separated_df %>%
+  group_by(Director) %>%
+  summarise(Total_Boxoffice = sum(Boxoffice, na.rm = TRUE)) %>%
+  arrange(desc(Total_Boxoffice)) %>% 
+  rename('Total Boxoffice ($)' = Total_Boxoffice)
+
+top_boxoffice_directors
+```
+
+## Writers
+Similarly, writers create the backbone of the film – the story. The top-grossing writer in our dataset is George Lucas, with a total box office contribution of over $6.7 billion, highlighting the significant financial value that high-profile writers can bring to a project. The data also emphasizes the notable contributions of Stan Lee, Bob Kane, and Jack Kirby, all creators of popular superhero franchises.
+
+```{r, echo=FALSE, message=FALSE}
+# Separate the writers into individual rows
+writer_separated_df <- regression_df1 %>%
+  separate_rows(Writer, sep = ",\\s*") %>%
+  mutate(Writer = trimws(Writer))  # remove any potential leading or trailing whitespaces
+
+# Top writers by total box office revenue
+top_boxoffice_writers <- writer_separated_df %>%
+  group_by(Writer) %>%
+  summarise(Total_Boxoffice = sum(Boxoffice, na.rm = TRUE)) %>%
+  arrange(desc(Total_Boxoffice)) %>%
+  rename('Total Boxoffice ($)' = Total_Boxoffice)
+
+top_boxoffice_writers
+```
+
+## Production Houses
+Production houses, responsible for the overall management and financing of the film's production, also appear to have a notable effect on box office performance. Paramount Pictures and Universal Pictures lead in box office revenue with approximately $11.6 billion each, far surpassing other production houses. Warner Bros., Lucasfilm Ltd., and Amblin Entertainment also show significant box office contributions.
+
+```{r, echo=FALSE, message=FALSE}
+regression_df1 <- netflix_ratings %>%
+  filter(!is.na(Boxoffice))
+
+# Separate the production houses into individual rows
+separated_df <- regression_df1 %>%
+  separate_rows(`Production House`, sep = ",\\s*") %>%
+  mutate(`Production House` = trimws(`Production House`)) %>%
+  filter(!is.na(`Production House`))
+
+# Production houses by total box office revenue
+top_boxoffice_productions <- separated_df %>%
+  group_by(`Production House`) %>%
+  summarise(Total_Boxoffice = sum(Boxoffice, na.rm = TRUE)) %>%
+  arrange(desc(Total_Boxoffice)) %>%
+  rename('Total Boxoffice ($)' = Total_Boxoffice)
+
+top_boxoffice_productions
+```
+
+The table below provides an overview of the number of films produced by different production houses. Paramount Pictures and Universal Pictures hold the top spots with an impressive output of 133 films each. Warner Brothers and Warner Bros. follow. It is interesting to note that this result is closely similar to the one above, suggesting that the more films a production house produces, the more box office earnings it makes. 
+
+```{r, echo=FALSE, message=FALSE}
+top_movie_productions <- separated_df %>%
+  group_by(`Production House`) %>%
+  tally(sort = TRUE) %>%
+  rename('Production House' = `Production House`, 'Titles Produced' = n)
+
+top_movie_productions
+
+```
+
+
+These results offer interesting insights into the potential influence of directors, writers, and production houses on a film's box office performance.
+
+
+# Network Analysis 
+
+## Director Network
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+
+# Step 1
+unique_directors <- unique(director_separated_df$Director)
+
+# Step 2
+director_matrix <- matrix(0, nrow = length(unique_directors), ncol = length(unique_directors))
+rownames(director_matrix) <- unique_directors
+colnames(director_matrix) <- unique_directors
+
+# Step 3
+grouped_director_df <- director_separated_df %>%
+  group_by(Title) %>%
+  summarize(directors = list(Director))
+
+# Now fill the adjacency matrix
+for (i in 1:nrow(grouped_director_df)) {
+  directors_for_title <- grouped_director_df$directors[[i]]
+  
+  # Filter out NA values
+  directors_for_title <- directors_for_title[!is.na(directors_for_title)]
+  
+  # Skip the loop if there's only one director
+  if (length(directors_for_title) < 2) next
+  
+  for (j in 1:(length(directors_for_title) - 1)) {
+    for (k in (j+1):length(directors_for_title)) {
+      director_j <- directors_for_title[j]
+      director_k <- directors_for_title[k]
+      
+      director_matrix[director_j, director_k] <- director_matrix[director_j, director_k] + 1
+      director_matrix[director_k, director_j] <- director_matrix[director_k, director_j] + 1
+    }
+  }
+}
+# Set diagonal of adjacency matrix to 0
+diag(director_matrix) <- 0
+
+# Create a graph from the adjacency matrix
+director_graph <- graph_from_adjacency_matrix(director_matrix, mode = "undirected", weighted = TRUE)
+
+# Set the color and width of the edges based on the weight
+E(director_graph)$color <- "darkgrey"
+E(director_graph)$width <- E(director_graph)$weight / max(E(director_graph)$weight) * 5
+V(director_graph)$size = sqrt(degree(director_graph))
+
+# Plot the graph with no labels and constant vertex size
+plot(director_graph, vertex.label = NA, 
+     edge.width = E(director_graph)$width, 
+     edge.color = E(director_graph)$color, 
+     vertex.size = V(director_graph)$size,  # constant vertex size
+     main = "Director Collaboration Network")
+```
+
+This network showcases the interconnections between directors, providing a visual depiction of their collaborative efforts.
+
+By analyzing the graph, we observe that most directors work independently, as demonstrated by the vast number of isolated nodes in the network. This solitary mode of operation is typical in the industry, where a single director is often responsible for the artistic vision and leadership of a film.
+
+However, we also see a smaller number of nodes in the center that are interconnected (and overlapped), representing directors who have collaborated on films. While collaborations are less frequent than individual directorships, they are by no means rare and may suggest shared creative visions or successful working dynamics between specific directors.
+
+Interestingly, among the collaborative clusters, most are pairs rather than larger groups. This suggests that co-directing often involves two directors rather than larger teams, potentially to balance creative control and practical responsibilities while avoiding too many competing visions.
+
+It's crucial to note that this network does not evaluate the success or popularity of the films resulting from these collaborations. The purpose of this graph is to provide a bird's-eye view of the interconnectedness within the director landscape and the patterns of collaboration within the industry. 
+
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+
+# Calculate total awards for each writer
+award_summary <- director_separated_df %>%
+  group_by(Director) %>%
+  summarise(TotalAwards = sum(`Awards Received`) + sum(`Awards Nominated For`))
+
+# Define award categories/bins
+award_summary$AwardBin <- cut(award_summary$TotalAwards, breaks = c(0, 1, 10, 50, 100, Inf), 
+                              labels = c(1, 2, 3, 4, 5))
+
+# Assign award bins to vertices in the graph
+V(director_graph)$AwardBin <- award_summary$AwardBin[match(V(director_graph)$name, award_summary$Director)]
+
+# Replace NA values with 1 (for directors with no awards)
+V(director_graph)$AwardBin[is.na(V(director_graph)$AwardBin)] <- 1
+
+# Assign colors based on award bin
+color_map <- c("grey", "yellow", "orange", "red",  "darkred")
+V(director_graph)$color <- color_map[V(director_graph)$AwardBin]
+V(director_graph)$size = sqrt(degree(director_graph))
+
+# Plot the graph
+plot(director_graph, vertex.label = NA, 
+     edge.width = E(director_graph)$width, 
+     edge.color = E(director_graph)$color, 
+     vertex.size = V(director_graph)$size, 
+     vertex.color = V(director_graph)$color,
+     main = "Success in Director Collaboration Network")
+```
+
+This visualization incorporates an additional layer of information: the total awards received and nominated for by each director, represented by different colors.
+
+Interestingly, most of the darker colored nodes (representing directors with a high number of awards) are situated on the outskirts of the graph, indicating they have not engaged in significant collaborations with other directors. This pattern suggests that professional success, as measured by awards in this case, is not strongly associated with frequent collaborations in the directorial network. In other words, many of the most awarded directors tend to work independently rather than frequently co-directing films.
+
+This observation aligns with the common industry practice of having a single director leading a film project. It suggests that maintaining a singular artistic vision, which is easier with one director, may be an influential factor in achieving critical acclaim and recognition. However, this pattern doesn't rule out the importance of occasional collaborations, which might offer valuable opportunities for directors to learn from one another and create unique filmic visions.
+
+In summary, this graph provides a perspective on the interplay between director collaborations and professional success. While collaborative projects do occur and can result in successful films, many award-winning directors have achieved their recognition through their independent work. 
+
+## Writer Network
+
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+unique_writers <- unique(writer_separated_df$Writer)
+writer_matrix <- matrix(0, nrow = length(unique_writers), ncol = length(unique_writers),
+                        dimnames = list(unique_writers, unique_writers))
+
+grouped_writer_df <- writer_separated_df %>%
+  group_by(Title) %>%
+  summarize(writers = list(unique(Writer)))
+
+for (i in 1:nrow(grouped_writer_df)) {
+  writers_for_title <- grouped_writer_df$writers[[i]]
+  if(length(writers_for_title) > 1) {
+    for (j in 1:(length(writers_for_title) - 1)) {
+      for (k in (j+1):length(writers_for_title)) {
+        writer_j <- writers_for_title[j]
+        writer_k <- writers_for_title[k]
+        writer_matrix[writer_j, writer_k] <- writer_matrix[writer_j, writer_k] + 1
+        writer_matrix[writer_k, writer_j] <- writer_matrix[writer_k, writer_j] + 1
+      }
+    }
+  }
+}
+
+diag(writer_matrix) <- 0
+writer_graph <- graph_from_adjacency_matrix(writer_matrix, mode = "undirected", weighted = TRUE)
+E(writer_graph)$width <- E(writer_graph)$weight / max(E(writer_graph)$weight) * 10
+E(writer_graph)$color <- "gray"
+V(writer_graph)$size <- sqrt(degree(writer_graph))
+
+plot(writer_graph, vertex.label = NA, 
+     edge.width = E(writer_graph)$width, 
+     edge.color = E(writer_graph)$color, 
+     vertex.size = V(writer_graph)$size,
+     main = "Writer Collaboration Network")
+```
+
+This visualization represent the "Writer Collaboration Network," depicting how writers in the dataset have collaborated on film and TV projects. Unlike the director collaboration network, the writer network is denser and contains many interconnected nodes, reflecting the common practice of having multiple writers on a single project.
+
+The  graph reveals an interesting structure in the writer network. A densely interconnected cluster in the center suggests a group of writers who frequently collaborate with each other, possibly indicating shared genres or styles. The central location of these nodes signifies that they are well-connected within the network, collaborating with a wide range of other writers. Surrounding this central cluster is a ring of isolated nodes, which represent writers who generally work solo.
+
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+
+# Calculate total awards for each writer
+award_summary_writer <- writer_separated_df %>%
+  group_by(Writer) %>%
+  summarise(TotalAwards = sum(`Awards Received`) + sum(`Awards Nominated For`))
+
+# Define award categories/bins
+award_summary_writer$AwardBin <- cut(award_summary_writer$TotalAwards, breaks = c(0, 1, 10, 50, 100, Inf), 
+                                     labels = c(1, 2, 3, 4, 5))
+
+# Assign award bins to vertices in the graph
+V(writer_graph)$AwardBin <- award_summary_writer$AwardBin[match(V(writer_graph)$name, award_summary_writer$Writer)]
+
+# Replace NA values with 1 (for writers with no awards)
+V(writer_graph)$AwardBin[is.na(V(writer_graph)$AwardBin)] <- 1
+
+# Assign colors based on award bin
+color_map <- c("grey", "yellow", "orange", "red",  "darkred")
+V(writer_graph)$color <- color_map[V(writer_graph)$AwardBin]
+V(writer_graph)$size <- sqrt(degree(writer_graph))
+
+# Plot the graphx`x`
+plot(writer_graph, vertex.label = NA, 
+     edge.width = E(writer_graph)$width, 
+     edge.color = E(writer_graph)$color, 
+     vertex.size = V(writer_graph)$size, 
+     vertex.color = V(writer_graph)$color,
+     vertex.border = NA,
+     main = "Success in Writer Collaboration Network")
+```
+
+This graph adds another layer of information by coloring the nodes based on the number of awards received or nominations. It provides a visual demonstration of the correlation between writer collaborations and professional success. The dark colored nodes are predominantly located within the densely interconnected center, suggesting that collaborative writing can significantly contribute to the success of a film or TV project, as measured by awards and nominations.
+
+Yet, there are still a few award-winning nodes outside the central cluster, showing that solo writers can also achieve recognition and success. It's important to remember that this observation doesn't mean solo writing guarantees awards; success in writing, like in directing, is multifaceted and depends on various factors including talent, creativity, originality, and sometimes sheer luck.
+
+These graphs emphasize the importance of collaborations in writing and provide a valuable lens into the structure of the professional network among writers. They suggest that, in the writing domain, working with a diverse range of colleagues could enhance creativity and increase the chances of producing award-winning work. Nonetheless, there are still opportunities for success for those who prefer to work independently.
+
+## Production House Network
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+unique_productionhouses <- unique(separated_df$`Production House`)
+
+# Create an empty adjacency matrix for production houses
+productionhouse_matrix <- matrix(0, nrow = length(unique_productionhouses), ncol = length(unique_productionhouses),
+                                 dimnames = list(unique_productionhouses, unique_productionhouses))
+
+# Group by title and list all unique production houses associated with each title
+grouped_productionhouse_df <- separated_df %>%
+  group_by(Title) %>%
+  summarize(productionhouses = list(unique(`Production House`)))
+
+# Iterate over the grouped dataframe and increment matrix entries for every pair of production houses that worked on the same title
+for (i in 1:nrow(grouped_productionhouse_df)) {
+  productionhouses_for_title <- grouped_productionhouse_df$productionhouses[[i]]
+  if(length(productionhouses_for_title) > 1) {
+    for (j in 1:(length(productionhouses_for_title) - 1)) {
+      for (k in (j+1):length(productionhouses_for_title)) {
+        productionhouse_j <- productionhouses_for_title[j]
+        productionhouse_k <- productionhouses_for_title[k]
+        productionhouse_matrix[productionhouse_j, productionhouse_k] <- productionhouse_matrix[productionhouse_j, productionhouse_k] + 1
+        productionhouse_matrix[productionhouse_k, productionhouse_j] <- productionhouse_matrix[productionhouse_k, productionhouse_j] + 1
+      }
+    }
+  }
+}
+
+# Remove diagonal entries
+diag(productionhouse_matrix) <- 0
+
+# Create a graph from the adjacency matrix
+productionhouse_graph <- graph_from_adjacency_matrix(productionhouse_matrix, mode = "undirected", weighted = TRUE)
+
+# Set edge attributes
+E(productionhouse_graph)$width <- E(productionhouse_graph)$weight / max(E(productionhouse_graph)$weight) * 10
+E(productionhouse_graph)$color <- "gray"
+
+# Set vertex size based on degree (number of connections)
+V(productionhouse_graph)$size <- sqrt(degree(productionhouse_graph))
+
+# Plot the graph
+plot(productionhouse_graph, vertex.label = NA, 
+     edge.width = E(productionhouse_graph)$width, 
+     edge.color = E(productionhouse_graph)$color, 
+     vertex.size = V(productionhouse_graph)$size, 
+     main = "Production House Collaboration Network")
+```
+
+The visualization presents an intriguing view into the collaboration patterns of different production houses. Unlike directors but similar to writers, production houses appear to be quite well interconnected, as suggested by the density of the network depicted in the graph.
+
+The structure of this network suggests that many production houses often collaborate on projects, forming partnerships and alliances. A notable aspect of the graph is the presence of several larger nodes in the center of the network, which indicates that these production houses are particularly well-connected within the industry and have worked on numerous titles. These central production houses are possibly major studios that collaborate with a wide array of smaller production houses, or they might be prolific production houses involved in many projects.
+
+On the periphery, there are fewer solitary nodes compared to the writer and director networks. These smaller and less connected nodes might represent niche or independent production houses that tend to work on their own projects. The graph highlights that such independent operations are less common in the realm of production houses than they are among writers and directors.
+
+The visualization of production house collaborations offers a useful perspective into the organizational side of the film and TV industry. It shows how projects often require cooperation between multiple production entities, leading to a highly interconnected network structure. This analysis could be further extended to examine how the size or success of a production house relates to its position within the network, or how the structure of the network changes over time.
+
+```{r, echo=FALSE, message=FALSE, fig.width = 10, fig.height = 8}
+# Get the top 10 production houses
+top_10_productionhouses <- head(top_boxoffice_productions$`Production House`, 10)
+
+# Set the color attribute for the top 10 production houses to red
+V(productionhouse_graph)[V(productionhouse_graph)$name %in% top_10_productionhouses]$color <- "red"
+
+# Plot the graph
+plot(productionhouse_graph, vertex.label = NA, 
+     edge.width = E(productionhouse_graph)$width, 
+     edge.color = E(productionhouse_graph)$color, 
+     vertex.size = V(productionhouse_graph)$size, 
+     main = "Production House Collaboration Network")
+```
+
+This graph now includes the top 10 most successful production houses, marked in red. This visual enhancement provides an interesting perspective on the importance of network centrality to the success of a production house.
+
+The central nodes, already noteworthy for their many connections, now stand out even more with their red coloring. The majority of these most successful production houses are part of the well-connected core of the network. This indicates that these top production houses have collaborated extensively with a wide array of other production houses on various projects.
+
+It's clear from the graph that being well-connected is a common trait among the most successful production houses. This might be due to a variety of factors. For instance, having a large network could facilitate access to resources, talent, and opportunities. Additionally, these collaborations might enable the sharing of risks and costs associated with large or risky projects.
+
+The graph underscores the importance of collaborations and networking in the film and TV industry. To maximize success, it seems beneficial for a production house to cultivate a broad and diverse range of partnerships and alliances.
+
+However, it's also crucial to remember that correlation does not imply causation. While the data suggests that successful production houses tend to be well-connected, we can't necessarily conclude that being well-connected will guarantee success. Many other factors, such as production quality, marketing, and timing, also play critical roles in the success of a production house.
+
+## Conclusion 
+
+In summary, this report provides a detailed exploration of the streaming industry, emphasizing Netflix's central role in it. Initially, the report compared the content libraries of Netflix and its competitors, presenting insights into the amount, type, and age rating distribution of content on each platform. This part of the analysis revealed strategies employed by different platforms in terms of content quantity and genre offerings, offering insight into their respective audience targeting efforts.
+
+The focus then shifted to a more profound analysis of Netflix, shedding light on the streaming giant's international focus as evidenced by its diverse range of content sourced from various countries. Trends in Netflix's content addition over time also provided insights into its acquisition strategy.
+
+A series of regression analyses indicated that factors such as movie ratings, number of languages a movie is released in, and the accolades a movie receives significantly influence its box office performance. This reinforces the importance of critical acclaim, global accessibility, and industry recognition in achieving financial success.
+
+Finally, the report emphasized the role of directors, writers, and production houses in a film's performance and highlighted the collaborative networks within these professional groups. These networks illustrated the interconnected nature of the industry and underscored the significance of strong collaborative relationships in achieving success.
+
+Overall, this report offers valuable insights into the content strategies and success factors in the streaming industry, contributing to a deeper understanding of the dynamic digital entertainment landscape.
+
+# Appendix 
+
+__Regression Table 1__
+```{r, echo=FALSE, message=FALSE}
+lm_model <- lm(Boxoffice ~ `IMDb Score` + `Rotten Tomatoes Score` + `Metacritic Score`, data = regression_df1)
+summary(lm_model)
+```
+
+__Regression Table 2__
+```{r, echo=FALSE, message=FALSE}
+regression1 <- lm(Boxoffice ~ Languages, data = regression_df1)
+summary(regression1)
+```
+
+__Regression Table 3__
+```{r, echo=FALSE, message=FALSE}
+regression2 <- lm(Boxoffice ~ `Awards Received` + `Awards Nominated For`, data = regression_df1)
+summary(regression2)
+```
